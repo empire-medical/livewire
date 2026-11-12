@@ -3,7 +3,7 @@
 Measured 2026-11-12 in Docker (PHP 8.4.27, Chromium 156), interleaved A/B against the untouched `v4.4.8` worktree.
 All numbers are from the *synthetic* Orders Manage fixture (`perf/fixtures/orders-manage`, built by the empire-v2 investigator from
 the real page's structure; 200 rows, 801 `x-data`, ~22.8k morph comments). Re-run: `perf/ab.sh perf/php/<Test>.php` (PHP),
-`perf/js/run.sh` (browser). Patch: `perf/patches/0001-core-performance.patch` (+ new `src/Features/SupportSkipUnchanged/`).
+`perf/js/run.sh` (browser). Changes live on branch `perf/core-performance` (new feature folder `src/Features/SupportSkipUnchanged/`).
 
 ## Server (PHP, one update round trip; lower is better)
 
