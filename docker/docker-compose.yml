@@ -1,0 +1,56 @@
+# Usage (from repo root):  docker compose -f docker/docker-compose.yml run --rm app <command>
+# Example:                 docker compose -f docker/docker-compose.yml run --rm app composer test:unit
+#
+# `app`     unit tests, benchmarks, composer, npm. Sets DUSK_DRIVER_URL so testbench-dusk does NOT try to
+#           launch chromedriver in setUpBeforeClass (unit tests never use a browser).
+# `browser` same image plus Chromium. Use for Dusk tests, always with --filter.
+x-build: &build
+  context: ..
+  dockerfile: docker/Dockerfile
+  args:
+    PHP_VERSION: ${PHP_VERSION:-8.4}
+    UID: ${UID:-1000}
+    GID: ${GID:-1000}
+
+services:
+  app:
+    build:
+      <<: *build
+      target: base
+    image: livewire-dev:${PHP_VERSION:-8.4}
+    working_dir: /app
+    environment:
+      DUSK_DRIVER_URL: http://localhost:9515
+    volumes:
+      - ..:/app
+      - composer-cache:/home/dev/.composer/cache
+    command: ["php", "-v"]
+
+  browser:
+    build:
+      <<: *build
+      target: browser
+    image: livewire-dev-browser:${PHP_VERSION:-8.4}
+    working_dir: /app
+    entrypoint: ["sh", "/app/docker/browser-entrypoint.sh"]
+    volumes:
+      - ..:/app
+      - composer-cache:/home/dev/.composer/cache
+    command: ["php", "-v"]
+
+  profile:
+    build:
+      <<: *build
+      target: profile
+    image: livewire-dev-profile:${PHP_VERSION:-8.4}
+    working_dir: /app
+    environment:
+      DUSK_DRIVER_URL: http://localhost:9515
+      XDEBUG_MODE: ${XDEBUG_MODE:-profile}
+    volumes:
+      - ..:/app
+      - composer-cache:/home/dev/.composer/cache
+    command: ["php", "-v"]
+
+volumes:
+  composer-cache:
