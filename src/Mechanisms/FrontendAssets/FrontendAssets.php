@@ -222,6 +222,8 @@ class FrontendAssets extends Mechanism
 
         $progressBar = config('livewire.navigate.show_progress_bar', true) ? '' : 'data-no-progress-bar';
 
+        $skipUnchanged = config('livewire.morph_skip_unchanged', true) ? '' : 'data-no-skip-unchanged';
+
         $moduleUrl = url(app('livewire')->getUriPrefix());
 
         $updateUri = url(app('livewire')->getUpdateUri());
@@ -231,7 +233,7 @@ class FrontendAssets extends Mechanism
         );
 
         return <<<HTML
-        {$assetWarning}<script src="{$url}" {$nonce} {$progressBar} data-csrf="{$token}" data-module-url="{$moduleUrl}" data-update-uri="{$updateUri}" {$extraAttributes}></script>
+        {$assetWarning}<script src="{$url}" {$nonce} {$progressBar} {$skipUnchanged} data-csrf="{$token}" data-module-url="{$moduleUrl}" data-update-uri="{$updateUri}" {$extraAttributes}></script>
         HTML;
     }
 
@@ -248,6 +250,7 @@ class FrontendAssets extends Mechanism
             'uri' => url(app('livewire')->getUpdateUri()),
             'moduleUrl' => url(app('livewire')->getUriPrefix()),
             'progressBar' => $progressBar,
+            'skipUnchanged' => (bool) config('livewire.morph_skip_unchanged', true),
             'nonce' => $options['nonce'] ?? Vite::cspNonce() ?? '',
         ]);
 

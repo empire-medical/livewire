@@ -10,6 +10,8 @@ class EventBus
     protected array $listenersAfter = [];
     protected array $listenersBefore = [];
 
+    protected static ?\Closure $passthrough = null;
+
     public function boot(): void
     {
         app()->singleton($this::class);
@@ -69,19 +71,14 @@ class EventBus
     {
         $middlewares = [];
 
-        $listeners = [];
+        $before = $this->listenersBefore[$name] ?? null;
+        $on = $this->listeners[$name] ?? null;
+        $after = $this->listenersAfter[$name] ?? null;
 
-        if (isset($this->listenersBefore[$name])) {
-            $listeners = $this->listenersBefore[$name];
-        }
-
-        if (isset($this->listeners[$name])) {
-            $listeners = array_merge($listeners, $this->listeners[$name]);
-        }
-
-        if (isset($this->listenersAfter[$name])) {
-            $listeners = array_merge($listeners, $this->listenersAfter[$name]);
-        }
+        // Avoid merging arrays on the (overwhelmingly common) path where only one kind of listener exists...
+        $listeners = ($before === null && $after === null)
+            ? ($on ?? [])
+            : [...($before ?? []), ...($on ?? []), ...($after ?? [])];
 
         foreach ($listeners as $callback) {
             $result = $callback(...$params);
@@ -89,6 +86,13 @@ class EventBus
             if ($result !== null) {
                 $middlewares[] = $result;
             }
+        }
+
+        // Nothing to run on the way out: share one pass-through closure instead of allocating a new one...
+        if ($middlewares === []) {
+            return static::$passthrough ??= function (&$forward = null, ...$extras) {
+                return $forward;
+            };
         }
 
         return function (&$forward = null, ...$extras) use ($middlewares) {

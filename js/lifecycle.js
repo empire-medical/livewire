@@ -15,6 +15,7 @@ import morph from '@alpinejs/morph'
 import mask from '@alpinejs/mask'
 import Alpine from 'alpinejs'
 import { dispatch } from './utils'
+import { seedServerSignatures } from './morph'
 
 export function start() {
     setTimeout(() => ensureLivewireScriptIsntMisplaced())
@@ -121,6 +122,9 @@ export function start() {
             })
         })
     )
+
+    // Remember what the server rendered for keyed elements, before Alpine initialises (and changes) them...
+    seedServerSignatures()
 
     Alpine.start()
 

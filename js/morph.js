@@ -4,6 +4,67 @@ import Alpine from 'alpinejs'
 import { extractFragmentMetadataFromMarkerNode, isEndFragmentMarker, isStartFragmentMarker } from "./fragment"
 import { transitionDomMutation } from "./directives/wire-transition"
 
+// Unchanged keyed subtrees are skipped during morphing. For every keyed element that has no keyed
+// descendants, we remember a signature of the HTML the server last rendered for it (the live element is
+// the WeakMap key). If the server renders byte-identical HTML again there is nothing to apply, so the
+// element and its subtree are skipped. This keeps long lists (hundreds of keyed rows) from being
+// walked and re-initialised when only a few rows actually changed.
+//
+// Signatures have to be taken from the pristine server DOM: Alpine's morph initialises the incoming
+// ("to") tree while patching, which mutates it...
+let serverSignatures = new WeakMap
+let lastIncomingNode = null
+let skipUnchangedEnabled = true
+
+function readSkipUnchangedSetting() {
+    if (window.livewireScriptConfig && window.livewireScriptConfig.skipUnchanged === false) return false
+
+    if (document.querySelector('script[data-update-uri][data-no-skip-unchanged]')) return false
+
+    return true
+}
+
+function eachSignableElement(root, callback) {
+    for (let el of root.querySelectorAll('[wire\\:key]')) {
+        if (el.hasAttribute('wire:id')) continue
+
+        // Containers (elements with keyed descendants) are always morphed, their keyed children are skipped...
+        if (el.querySelector('[wire\\:key]')) continue
+
+        callback(el)
+    }
+}
+
+// Take signatures from server-rendered content that is about to be morphed in ("to" side)...
+function stampIncomingSignatures(root) {
+    if (! skipUnchangedEnabled) return
+
+    eachSignableElement(root, el => el.__livewire_server_signature = el.outerHTML)
+}
+
+// Take signatures of the initial server-rendered DOM, before Alpine initialises it...
+export function seedServerSignatures(root = document) {
+    skipUnchangedEnabled = readSkipUnchangedSetting()
+
+    if (! skipUnchangedEnabled) return
+
+    eachSignableElement(root, el => serverSignatures.set(el, el.outerHTML))
+}
+
+// An element is being added by cloning an incoming one: its signature carries over to the clone...
+function transferSignatures(toRoot, clonedRoot) {
+    // The clone must be a faithful copy of the incoming node, otherwise this "added" doesn't belong
+    // to the "adding" we last saw (for example when a listener skipped the add)...
+    if (toRoot.nodeType !== 1 || clonedRoot.nodeType !== 1 || ! toRoot.isEqualNode(clonedRoot)) return
+
+    let own = [toRoot, ...toRoot.querySelectorAll('[wire\\:key]')]
+    let cloned = [clonedRoot, ...clonedRoot.querySelectorAll('[wire\\:key]')]
+
+    own.forEach((el, i) => {
+        if (el.__livewire_server_signature !== undefined) serverSignatures.set(cloned[i], el.__livewire_server_signature)
+    })
+}
+
 export async function morph(component, el, html) {
     let wrapperTag = getTagName(el.parentElement)
 
@@ -55,6 +116,8 @@ export async function morph(component, el, html) {
         }
     })
 
+    stampIncomingSignatures(to)
+
     let transitionOptions = {}
 
     if (Object.prototype.hasOwnProperty.call(component.effects, 'transition') && component.effects.transition) {
@@ -91,6 +154,8 @@ export async function morphFragment(component, startNode, endNode, toHTML) {
         parentProviderWrapper.appendChild(toContainer)
         parentProviderWrapper.__livewire = parentComponent
     }
+
+    stampIncomingSignatures(toContainer)
 
     trigger('island.morph', { startNode, endNode, component })
 
@@ -145,6 +210,19 @@ function getMorphConfig(component) {
 
             if (isntElement(el)) return
 
+            // Unchanged since the server last rendered it: nothing to apply...
+            let signature = toEl.__livewire_server_signature
+
+            if (signature !== undefined && serverSignatures.get(el) === signature) return skip()
+
+            // Only remember the server's HTML for this element if it ends up fully applied...
+            let applied = true
+            let originalSkip = skip, originalChildrenOnly = childrenOnly, originalSkipChildren = skipChildren, originalSkipUntil = skipUntil
+            skip = () => { applied = false; return originalSkip() }
+            childrenOnly = () => { applied = false; return originalChildrenOnly() }
+            skipChildren = () => { applied = false; return originalSkipChildren() }
+            skipUntil = (...args) => { applied = false; return originalSkipUntil(...args) }
+
             trigger('morph.updating', { el, toEl, component, skip, childrenOnly, skipChildren, skipUntil })
 
             // bypass DOM diffing for children by overwriting the content
@@ -163,6 +241,11 @@ function getMorphConfig(component) {
             // element. This ensures new Alpine magics like $wire and @entangle can
             // initialize in the context of a real Livewire component object.
             if (isComponentRootEl(el)) toEl.__livewire = component
+
+            if (signature !== undefined) {
+                if (applied) serverSignatures.set(el, signature)
+                else serverSignatures.delete(el)
+            }
         },
 
         updated: (el) => {
@@ -184,10 +267,16 @@ function getMorphConfig(component) {
         },
 
         adding: (el) => {
+            lastIncomingNode = el
+
             trigger('morph.adding', { el, component })
         },
 
         added: (el) => {
+            if (lastIncomingNode) transferSignatures(lastIncomingNode, el)
+
+            lastIncomingNode = null
+
             if (isntElement(el)) return
 
             trigger('morph.added', { el })

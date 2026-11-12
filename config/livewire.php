@@ -212,6 +212,22 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Skip Unchanged Keyed Elements
+    |---------------------------------------------------------------------------
+    |
+    | When Livewire morphs a re-rendered component into the page, it skips any
+    | element with a wire:key (and no keyed children) whose HTML is identical
+    | to what the server rendered for it last time. This keeps long lists from
+    | being re-processed when only a few rows changed. Anything that changed
+    | the element on the client in the meantime (outside of Alpine/Livewire)
+    | is left alone instead of being reset. Set to false to always morph.
+    |
+    */
+
+    'morph_skip_unchanged' => true,
+
+    /*
+    |---------------------------------------------------------------------------
     | Smart Wire Keys
     |---------------------------------------------------------------------------
     |

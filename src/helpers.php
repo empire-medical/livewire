@@ -95,23 +95,41 @@ function pipe($subject) {
 }
 
 function trigger($name, ...$params) {
-    return app(\Livewire\EventBus::class)->trigger($name, ...$params);
+    return eventBus()->trigger($name, ...$params);
+}
+
+/**
+ * Resolve the EventBus once per container instead of on every trigger() (it is hit thousands of
+ * times per request). Keyed on the container instance so each test application, or Octane sandbox,
+ * gets a fresh lookup...
+ */
+function eventBus(): \Livewire\EventBus {
+    static $container = null, $bus = null;
+
+    $current = app();
+
+    if ($container !== $current || $bus === null) {
+        $container = $current;
+        $bus = $current->make(\Livewire\EventBus::class);
+    }
+
+    return $bus;
 }
 
 function on($name, $callback) {
-    return app(\Livewire\EventBus::class)->on($name, $callback);
+    return eventBus()->on($name, $callback);
 }
 
 function after($name, $callback) {
-    return app(\Livewire\EventBus::class)->after($name, $callback);
+    return eventBus()->after($name, $callback);
 }
 
 function before($name, $callback) {
-    return app(\Livewire\EventBus::class)->before($name, $callback);
+    return eventBus()->before($name, $callback);
 }
 
 function off($name, $callback) {
-    app(\Livewire\EventBus::class)->off($name, $callback);
+    eventBus()->off($name, $callback);
 }
 
 function memoize($target) {

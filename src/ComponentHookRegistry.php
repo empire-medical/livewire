@@ -11,6 +11,29 @@ class ComponentHookRegistry
 
     protected static $componentHooks = [];
 
+    // hook class => [event => true] for the lifecycle methods that class actually implements...
+    protected static array $hookEvents = [];
+
+    protected const EVENTS = [
+        'boot', 'mount', 'hydrate', 'update', 'call', 'render', 'renderIsland',
+        'renderPlaceholder', 'dehydrate', 'destroy', 'exception',
+    ];
+
+    protected static function implementedEvents($hook): array
+    {
+        $class = is_object($hook) ? $hook::class : $hook;
+
+        if (isset(static::$hookEvents[$class])) return static::$hookEvents[$class];
+
+        $events = [];
+
+        foreach (static::EVENTS as $event) {
+            if (method_exists($class, $event)) $events[$event] = true;
+        }
+
+        return static::$hookEvents[$class] = $events;
+    }
+
     static function register($hook)
     {
         if (method_exists($hook, 'provide')) $hook::provide();
@@ -35,23 +58,29 @@ class ComponentHookRegistry
     {
         static::$components = new WeakMap;
 
+        static::$hookEvents = [];
+
         foreach (static::$componentHooks as $hook) {
-            on('mount', function ($component, $params, $key, $parent, $attributes) use ($hook) {
-                if (! $hook = static::initializeHook($hook, $component)) {
+            $events = static::implementedEvents($hook);
+
+            // Every hook class still gets an instance per component (even one implementing no lifecycle
+            // methods), because other code can look instances up with getHook() and call their methods...
+            on('mount', function ($component, $params, $key, $parent, $attributes) use ($hook, $events) {
+                if (! $instance = static::initializeHook($hook, $component)) {
                     return;
                 }
 
-                $hook->callBoot();
-                $hook->callMount($params, $parent, $attributes);
+                if (isset($events['boot'])) $instance->callBoot();
+                if (isset($events['mount'])) $instance->callMount($params, $parent, $attributes);
             });
 
-            on('hydrate', function ($component, $memo) use ($hook) {
-                if (! $hook = static::initializeHook($hook, $component)) {
+            on('hydrate', function ($component, $memo) use ($hook, $events) {
+                if (! $instance = static::initializeHook($hook, $component)) {
                     return;
                 }
 
-                $hook->callBoot();
-                $hook->callHydrate($memo);
+                if (isset($events['boot'])) $instance->callBoot();
+                if (isset($events['hydrate'])) $instance->callHydrate($memo);
             });
         }
 
@@ -115,14 +144,23 @@ class ComponentHookRegistry
     }
 
     static function proxyCallToHooks($target, $method) {
-        return function (...$params) use ($target, $method) {
+        // "callRenderIsland" => "renderIsland"...
+        $event = lcfirst(substr($method, 4));
+
+        return function (...$params) use ($target, $method, $event) {
             $forwardCallbacks = [];
 
             foreach (static::$components[$target] ?? [] as $hook) {
+                // Don't dispatch to hooks that don't implement this event (their call* wrapper is a no-op)...
+                if (! isset(static::implementedEvents($hook)[$event])) continue;
+
                 if ($callback = $hook->{$method}(...$params)) {
                     $forwardCallbacks[] = $callback;
                 }
             }
+
+            // Nothing to run on the way out, so don't allocate a closure for the event bus to call...
+            if ($forwardCallbacks === []) return null;
 
             return function (...$forwards) use ($forwardCallbacks) {
                 foreach ($forwardCallbacks as $callback) {

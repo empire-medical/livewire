@@ -2,6 +2,7 @@
 
 namespace Livewire\Features\SupportComputed;
 
+use Illuminate\Support\Str;
 use Livewire\ComponentHook;
 use Livewire\Drawer\Utils as SyntheticUtils;
 
@@ -12,6 +13,10 @@ use function Livewire\wrap;
 class SupportLegacyComputedPropertySyntax extends ComponentHook
 {
     protected static array $computedPropertyNamesCache = [];
+
+    // Computed attribute lookup tables, keyed by the component's AttributeCollection instance. A new
+    // collection is created whenever attributes are merged in, so stale tables are never served...
+    protected static ?\WeakMap $computedAttributeMaps = null;
 
     static function provide()
     {
@@ -49,16 +54,33 @@ class SupportLegacyComputedPropertySyntax extends ComponentHook
 
         on('flush-state', function () {
             static::$computedPropertyNamesCache = [];
+            static::$computedAttributeMaps = null;
         });
     }
 
     public static function findComputedAttribute($target, $property)
     {
-        $propertyName = (string) str($property)->camel();
+        $attributes = $target->getAttributes();
 
-        return $target->getAttributes()
-            ->whereInstanceOf(BaseComputed::class)
-            ->first(fn ($attr) => $attr->getName() === $propertyName);
+        static::$computedAttributeMaps ??= new \WeakMap;
+
+        $map = static::$computedAttributeMaps[$attributes] ??= static::buildComputedAttributeMap($attributes);
+
+        return $map[Str::camel($property)] ?? null;
+    }
+
+    protected static function buildComputedAttributeMap($attributes)
+    {
+        $map = [];
+
+        foreach ($attributes as $attribute) {
+            if (! $attribute instanceof BaseComputed) continue;
+
+            // Keep "first match wins" semantics...
+            $map[$attribute->getName()] ??= $attribute;
+        }
+
+        return $map;
     }
 
     public static function getComputedProperties($target)
