@@ -53,3 +53,14 @@ Unit: 1535 tests pass. Browser: 511 tests pass across 45 feature groups (morph, 
 sort, entangle, lazy, teleport, loading, current, polling, data binding, query string, navigate, events, validation, streaming, ...).
 New: `src/Features/SupportSkipUnchanged/{UnitTest,BrowserTest}.php`.
 A first draft that skipped instantiating hooks with no lifecycle methods broke `SupportStreaming` (found by the browser tests, reverted).
+
+## Real app (empire-v2 Orders Manage, 200 rows; synthetic seed; reports in codemap/real-app-ab.md, real-app-profile.md, app-side-ab.md)
+
+- **Unmodified mainline: fork == upstream within +-3%.** The skip never fires because cells render `uniqid()` per render (`orders-manage.blade.php:52,72`) and the table root `wire:key` contains every row id. Server time (TTFB) is flat in every arm: the update request is dominated by app queries and Blade.
+- **With the first two app fixes (deterministic ids, stable root key), fork vs the same app on upstream:** sort -55%, expand-one -51%, row-set -61%, expand-all -30% (main-thread LoAF). Versus the unmodified app: sort -53%, expand-one -57%, row-set -76%, expand-all -36%. At 4x CPU throttle: sort -57%, expand-one -56%.
+- **App-side only (upstream Livewire), cumulative vs unmodified:** deterministic ids -3/-10/-3 (sort/expand-one/row-set); + stable root key +3/-12/-37; + markers off -9/-28/-45; + shared Alpine expressions -8/-26/-45.
+- Real page profile (upstream): initial load is native 46%, Alpine core 22%, Livewire 11%; 2,386 unique x-data expressions (1,867 embed row ids) so Alpine's expression cache never hits; sort cost is Alpine initTree on replaced rows (351 ms) while Livewire's morph is 84 ms.
+- Fork bug found by the A/B and fixed in 9b60ace1: a keyed element that was a leaf, then a container, then a leaf again kept a stale signature, so closing a row was skipped and the lazy child stayed mounted (200 orphans after Collapse All). Re-verified: orphans 0, DOM fingerprints equal to upstream, same test results (F2 348/348 Feature + 18/18 browser; F4 has the same 4 OrderColumnHighlightsTest failures as U4, which pin the old markup).
+- Known behaviour difference (by design): edits made by something other than Alpine/Livewire to an unchanged keyed row persist (probe: upstream removes a `data-probe` attribute on the next morph, the fork keeps it; `morph_skip_unchanged=false` restores the reset). Example seen: after hiding and showing a column, a date cell reads empty in both arms; upstream's next re-render restores the server text, the fork leaves it empty until the row's HTML changes.
+- Prerequisite for the fork to help a page: deterministic per-render markup (no `uniqid()`/random ids in rows) and keyed rows. Anything that varies per render defeats the skip. Without these the fork changes nothing.
+- Caveat: absolute numbers come from a PHP built-in server and a local Playwright Chromium, not Octane/CloudFront/production hardware.
