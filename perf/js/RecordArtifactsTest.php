@@ -101,6 +101,7 @@ class RecordArtifactsTest extends TestCase
             'sort' => [[], $call('sort', ['part_number'])],
             'expand10' => [[], array_map(fn ($i) => ['method' => 'toggleExpanded', 'params' => [$i]], $this->firstIds(10))],
             'select' => [['selected' => [1, 2, 3]], []],
+            'expandall' => [[], $call('expandAll')],
         ];
 
         // The fixture's sort() ties on every row (see its README), so it never reorders. For the `sort`

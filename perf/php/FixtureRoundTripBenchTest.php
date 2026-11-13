@@ -18,6 +18,14 @@ class FixtureRoundTripBenchTest extends TestCase
 {
     use Bench;
 
+    protected function defineEnvironment($app)
+    {
+        parent::defineEnvironment($app);
+
+        // PERF_MARKERS=0 renders without morph markers, to measure what the markers cost on the server...
+        $app['config']->set('livewire.inject_morph_markers', getenv('PERF_MARKERS') !== '0');
+    }
+
     protected function rootAndChildSnapshots(int $expanded): array
     {
         Registrar::register(withRoute: false);

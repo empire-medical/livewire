@@ -16,7 +16,7 @@ let sideB = args.b || 'fork'
 let rounds = parseInt(args.rounds || 3)
 let iters = parseInt(args.iters || 7)
 let cpu = parseFloat(args['cpu-throttle'] || 1)
-let scenarioNames = (args.scenarios || 'ping,sort,expand10,select').split(',')
+let scenarioNames = (args.scenarios || 'ping,sort,expand10,select,expandall').split(',')
 let doProfile = args.profile !== 'false'
 let profIters = parseInt(args['profile-iters'] || 3)
 let artifactsDir = args.artifacts || path.resolve(__dirname, '../results/js/artifacts')
@@ -31,6 +31,9 @@ let SCENARIOS = {
     sort: { reload: true, run: "$wire.sort('part_number')" },
     expand10: { reload: true, run: '$wire.toggleExpanded(1)' },
     select: { reload: true, run: "$wire.$set('selected', [1, 2, 3], true)" },
+    expandall: { reload: true, run: '$wire.expandAll()' },
+    // Expand all rows, then load every lazy child at once (what a long scroll or an "open everything" action does): one bundled request with ~200 components.
+    lazyall: { reload: true, response: 'expandall', run: "$wire.expandAll().then(() => document.querySelectorAll('[x-intersect*=\"__lazyLoad\"]').forEach(el => Alpine.evaluate(el, el.getAttribute('x-intersect'))))" },
 }
 
 // Installed before any page script runs.
@@ -141,7 +144,7 @@ async function load(browser, origin, client, page, profile = null) {
 
 // One interaction on a loaded page; returns timings relative to the call.
 async function interact(page, client, scenarioKey, origin, profile = false) {
-    await fetch(origin + '/__scenario?name=' + scenarioKey).then(r => r.text())
+    await fetch(origin + '/__scenario?name=' + (SCENARIOS[scenarioKey].response || scenarioKey)).then(r => r.text())
     await page.evaluate(() => { let p = window.__perf; p.morphs.length = 0; p.responds.length = 0 })
     if (profile) { await client.send('Profiler.enable'); await client.send('Profiler.setSamplingInterval', { interval: 100 }); await client.send('Profiler.start') }
     let before = await metrics(client)
