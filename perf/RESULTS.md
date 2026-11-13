@@ -64,3 +64,23 @@ A first draft that skipped instantiating hooks with no lifecycle methods broke `
 - Known behaviour difference (by design): edits made by something other than Alpine/Livewire to an unchanged keyed row persist (probe: upstream removes a `data-probe` attribute on the next morph, the fork keeps it; `morph_skip_unchanged=false` restores the reset). Example seen: after hiding and showing a column, a date cell reads empty in both arms; upstream's next re-render restores the server text, the fork leaves it empty until the row's HTML changes.
 - Prerequisite for the fork to help a page: deterministic per-render markup (no `uniqid()`/random ids in rows) and keyed rows. Anything that varies per render defeats the skip. Without these the fork changes nothing.
 - Caveat: absolute numbers come from a PHP built-in server and a local Playwright Chromium, not Octane/CloudFront/production hardware.
+
+## Sweep beyond Orders Manage (2026-11-13)
+
+Server round trips, fork build, in-process (`perf/php/SweepBenchTest.php`); all small, so there is nothing left to win on the server outside rendering:
+
+| Scenario | Time |
+|---|---|
+| Form object with 38 `#[Url]` props: no-op call / set one prop / mount | 0.55 / 0.52 / 0.65 ms |
+| Component with 9 Eloquent model props: no-op call / mount | 0.53 / 1.3 ms (models hydrate lazily in 4.x, so no per-request queries until accessed) |
+| `#[Validate]` per keystroke (5 props): valid / invalid | 0.60 / 0.71 ms |
+| Parent with 24 child components: mount / no-op update | 8.9 ms (0.37 ms per child) / 0.97 ms |
+| Event: `__dispatch` listener / dispatch from an action | 0.44 / 0.43 ms |
+| Fixture root update with markers on vs off (server cost of markers) | 75 vs 73 ms (~3%) |
+
+Local-disk upload cleanup lists the temp dir on every finished upload, but it returns immediately for S3, so production is unaffected.
+
+Client, extra scenarios (n=15 per side, fork vs v4.4.8, deterministic fixture):
+- Expand All (`expandall`): morph done 486 -> 262 ms (-46%); settled 607 -> 383 ms (-37%).
+- Expand All then load all 200 lazy children (`lazyall`): root morph 485 -> 194 ms (-60%); total settled 1535 -> 1262 ms (-18%). The lazy phase itself (~1.07 s for 200 children) is unchanged: it is Alpine init, native parse and morph of each child, ~5 ms per child.
+- Two waste fixes in `js/`: `mergeNewSnapshot` no longer computes and returns a whole-tree diff nobody reads (-7% of response time on a 200-row component with a 3,400-scalar snapshot), and the request success handler parses each payload snapshot once instead of once per message (quadratic when a request bundles many components; correct but not visible in this harness, where lazy loads arrive as ~134 small requests).

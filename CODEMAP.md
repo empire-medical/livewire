@@ -249,6 +249,7 @@ Verified results in the container (PHP 8.4.27, Chromium 156):
 ## 9. Changes made in the fork (branch `perf/core-performance`; numbers in `perf/RESULTS.md`)
 
 Changes versus v4.4.8: `src/Features/SupportComputed/SupportLegacyComputedPropertySyntax.php` (computed attribute map), `src/helpers.php` + `src/EventBus.php` (cached bus, cheaper trigger), `src/ComponentHookRegistry.php` (per-event dispatch), `js/morph.js` + `js/lifecycle.js` (skip unchanged keyed elements), `config/livewire.php` + `src/Mechanisms/FrontendAssets/FrontendAssets.php` (`morph_skip_unchanged` switch), new `src/Features/SupportSkipUnchanged/`. Benchmarks: `perf/php/*` (+`perf/ab.sh`), `perf/js/*` (+`perf/js/run.sh`), fixture `perf/fixtures/orders-manage/`; profilers: `profile` docker service (xdebug + excimer), `perf/tools/*`. Local-only dirs: `.perf/` (baseline worktree at `.perf/baseline`), `perf/results/`.
+Also on the branch: `js/component.js` (no unused whole-tree diff), `js/request/index.js` (snapshots parsed once per response), `perf/php/SweepBenchTest.php` (form/model/validate/children/events scenarios), `perf/js` scenarios `expandall` and `lazyall`, `perf/ADOPTING.md` + `perf/release.sh` (cut a `-pN` release with `dist/` for the app).
 Lessons: xdebug exaggerates code made of many tiny calls (use the Excimer sampling profile, `perf/php/SampleProfileTest.php`); unit tests missed a hook regression that the browser tests caught, so always run the browser tests for morph/hook changes.
 
 ## 10. Environment notes
