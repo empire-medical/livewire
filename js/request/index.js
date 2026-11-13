@@ -425,8 +425,31 @@ function sendMessages() {
 
                 let messageResponsePayloads = responseJson.components
 
+                // Index the payloads by component id and parse each snapshot once, instead of re-parsing every
+                // payload for every message (quadratic when a request bundles many components)...
+                let payloadsByComponentId = new Map
+                let parsedSnapshots = new Map
+
+                messageResponsePayloads.forEach(payload => {
+                    let id = payload.id
+
+                    if (! payload.skip) {
+                        let parsed = JSON.parse(payload.snapshot)
+
+                        parsedSnapshots.set(payload, parsed)
+
+                        id = parsed.memo.id
+                    }
+
+                    if (! payloadsByComponentId.has(id)) payloadsByComponentId.set(id, [])
+
+                    payloadsByComponentId.get(id).push(payload)
+                })
+
                 request.messages.forEach(message => {
-                    messageResponsePayloads.forEach(payload => {
+                    let matchingPayloads = payloadsByComponentId.get(message.component.id) || []
+
+                    matchingPayloads.forEach(payload => {
                         if (message.isCancelled()) return
 
                         // Server skipped this child (unchanged reactive props)...
@@ -448,7 +471,7 @@ function sendMessages() {
                         }
 
                         let { snapshot: snapshotEncoded, effects } = payload
-                        let snapshot = JSON.parse(snapshotEncoded)
+                        let snapshot = parsedSnapshots.get(payload)
 
                         if (snapshot.memo.id === message.component.id) {
                             if (discardIfSuperseded(message)) return
