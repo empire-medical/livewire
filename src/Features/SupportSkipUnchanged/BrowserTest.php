@@ -96,4 +96,39 @@ class BrowserTest extends BrowserTestCase
             ->assertAttributeMissing('@static', 'data-client')
         ;
     }
+
+    public function test_a_keyed_element_that_stops_being_a_leaf_does_not_keep_a_stale_signature()
+    {
+        // "content" is a leaf (no keyed descendants) when closed, then a container while open, then a leaf again.
+        // The server HTML for the closed state must not be matched against the signature remembered
+        // from before it was opened, or closing would be skipped and the inner element would stay...
+        Livewire::visit(new class extends Component {
+            public $open = false;
+
+            public function toggle() { $this->open = ! $this->open; }
+
+            public function render()
+            {
+                return <<<'HTML'
+                    <div>
+                        <button wire:click="toggle" dusk="toggle">toggle</button>
+
+                        <div wire:key="row">
+                            <div wire:key="content" dusk="content">@if ($open)<span wire:key="inner" dusk="inner">inner</span>@endif</div>
+                        </div>
+                    </div>
+                HTML;
+            }
+        })
+            ->assertNotPresent('@inner')
+            ->waitForLivewire()->click('@toggle')
+            ->assertPresent('@inner')
+            ->waitForLivewire()->click('@toggle')
+            ->assertNotPresent('@inner')
+            ->waitForLivewire()->click('@toggle')
+            ->assertPresent('@inner')
+            ->waitForLivewire()->click('@toggle')
+            ->assertNotPresent('@inner')
+        ;
+    }
 }

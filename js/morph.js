@@ -215,6 +215,11 @@ function getMorphConfig(component) {
 
             if (signature !== undefined && serverSignatures.get(el) === signature) return skip()
 
+            // This element is no longer a signable leaf (it gained keyed descendants), so whatever we
+            // remembered for it describes content that is about to change. Forget it, or a later render
+            // that happens to match the old signature would be skipped while the live DOM differs...
+            if (signature === undefined) serverSignatures.delete(el)
+
             // Only remember the server's HTML for this element if it ends up fully applied...
             let applied = true
             let originalSkip = skip, originalChildrenOnly = childrenOnly, originalSkipChildren = skipChildren, originalSkipUntil = skipUntil
