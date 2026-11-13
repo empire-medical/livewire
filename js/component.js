@@ -1,4 +1,4 @@
-import { arrayPull, dataSet, deepClone, diff, diffAndConsolidate, diffAndPatchRecursive, extractData} from '@/utils'
+import { arrayPull, dataSet, deepClone, diffAndConsolidate, diffAndPatchRecursive, extractData} from '@/utils'
 import { generateWireObject } from '@/$wire'
 import { findComponentByEl, findComponent, hasComponent } from '@/store'
 import { trigger } from '@/hooks'
@@ -74,10 +74,6 @@ export class Component {
         let oldCanonical = deepClone(this.canonical)
         let updatedOldCanonical = this.applyUpdates(oldCanonical, updates)
 
-        let newCanonical = extractData(deepClone(snapshot.data))
-
-        let dirty = diff(updatedOldCanonical, newCanonical)
-
         this.snapshotEncoded = snapshotEncoded
 
         this.snapshot = snapshot
@@ -92,8 +88,6 @@ export class Component {
         // the trees directly, avoiding dot-notated paths which break when
         // object keys contain dots.
         diffAndPatchRecursive(updatedOldCanonical, newData, this.reactive)
-
-        return dirty
     }
 
     queueUpdate(propertyName, value) {
